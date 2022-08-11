@@ -16,5 +16,6 @@ public class AirportsByLatitudeProblem {
            "Tofino", 49.082222
            ...
          */
+
     }
 }

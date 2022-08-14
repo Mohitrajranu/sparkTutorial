@@ -181,3 +181,67 @@ Pair RDD : A Pair RDDs is a particular type of RDD that can store key-value pair
 Tuple2<Integer, String> tuple = new Tuple2<>(12,"value");
 Integer key=tuple._1();
 String value=tuple._2();
+
+Transformations on PairRDD
+Pair RDDs are allowed to use all the transformations available to regular RDDs, and thus support the same functions as regular RDDs.
+Since pair RDDs contain tuples, we need to pass functions that operate on tuples rather than on individual elements.
+Filter Transformation :: This filter transformation that can be applied to a regular RDD can also be applied to a pair RDD.
+The filter transformation takes in a function and returns a Pair RDD formed by selecting those elements which pass the filter function.
+
+Map and MapValues transformations :: The map transformations also works for pair RDDs , it can be used to convert an RDD to another one.
+But most of the time, when working with pair RDDs, we don't want to modify the keys, we just want to access the value part of our pair RDD.
+Since this is a typical pattern, spark provides the mapValues function. The mapValues function will be applied to each key value pair and will convert the values
+based on mapValues function, but it will not change the keys.
+
+Aggregation:: When our dataset is described in the format of key-value pairs, it is quite common that we would like to aggregate statistics across 
+all elements with the same key.
+reduceByKey runs several parallels reduce operations one for each key in the dataset where each operation combines values that have the same key.
+Considering  input datasets could have a huge number of keys , reduceByKey operation is not implemented as an action that returns a value to the driver program.
+Instead, it returns a new RDD consisting of each key and the reduced value for that key.
+
+groupByKey:: A common usecase for pair RDD is grouping our data by key.For example , viewing all of an account's transactions together.
+If our data is already keyed in the way we want, groupByKey will group our data using the key in our pair RDD.
+let's say the input pair RDD has keys of type K and values of type V , if we call group by key on the RDD, we get back a Pair RDD of type K and Iterable V.
+public JavaPairRDD<K,Iterable<V>> groupByKey()
+
+Use groupByKey only if you have to as in case of huge data  as the shuffle operation brings unnecessary data to be operated upon, which is not in case of reduceByKey as the data are reduce before as well as after shuffle operation.
+
+sortByKey:: We can sort a pair RDD as long as there is ordering defined on the key. Once we have sorted our pair RDD any subsequent call on the sorted pair RDD to collect or save will return us ordered data.
+sortByKey in reverse order :: public JavaPairRDD<K,V> sortByKey(boolean ascending)
+wordsPairRdd.sortByKey(true);
+custom comparator
+public JavaPairRDD<K,V> sortByKey(Comparator<K> comp)
+countPairRDD.sortByKey((a,b) -> Math.abs(a) - Math.abs(b))
+
+Data Partitioning :: 
+In order to reduce the amount of shuffle for groupByKey
+JavaPairRDD<String, Integer> partitionedWordPairRDD = wordsPairRdd.partitionBy(new HashPartitioner(4));
+partitionedWordPairRDD.persist(StorageLevel.DISK_ONLY));
+partitionedWordPairRDD.groupByKey().mapToPair(word -> new Tuple2<>(word._1(),getSum(word._2()))).collect();
+
+Operations which would benefit from partitioning :: Join,leftOuterJoin,rightOuterJoin,groupByKey,reduceByKey,combineByKey,lookup.
+How reduceByKey benefits from partitioning ?
+Running reduceByKey on a pre-partitioned RDD will cause all the values for each key to be computed locally on a single machine, requiring only the final, locally reduced value to be sent from each worker node back to the master.
+Operations which would be affected by partitioning ?
+Operations like map could cause the new RDD to forget the parent's partitioning information , as such operations could in theory , change the key of each element in the RDD.
+general guidance is to prefer mapValues over map operation.
+
+Join Operation :: Join operation allows us to join two RDDs together which is probably one of the most common operations on a Pair RDD.
+Joins types: leftOuterJoin,rightOuterJoin,crossJoin,innerJoin etc.
+
+If both RDDs have duplicate keys, join operation can dramatically expand the size of the data, it's recommended to perform a distinct or combineByKey operation to reduce the key space if possible.
+Join operation may require large network transfers or even create datasets beyond our capability to handle.
+Joins, in general are expensive since they require that corresponding keys from each RDD are located at the same partition so that they can be combine locally.
+If the RDDs do not have known partitioners, they will need to be shuffled so that both RDDs share a partitioner and data with the same keys live in the same partitioner and data with the same keys live in the same partitions.
+
+Shuffled Hash Join: To join data, Spark needs the data that is to be joined to live on the same partition. The default implementation of join in Spark is a shuffled hash join.
+The shuffled hash join ensures that data on each partition will contain the same keys by partitioning the second dataset with the same default partitioner as the first so that the 
+keys with the same hash value from both datasets are in the same partition.
+
+The shuffle can be avoided if both RDDs have a known partitioner. If they have the same partitioner the data may be colocated, it can prevent network transfer.So it is recommended to call partitionBy on the two join RDD with the same partitioner before joining them.
+val partitioner = new HashPartitioner(20)
+ages.partitionBy(partitioner) 
+addresses.partitionBy(partitioner)
+
+Accumulators are variables that are used for aggregating information across the executors.For example we can calculate how many records are corrupted or count events that occur during job execution for debugging purposes.
+

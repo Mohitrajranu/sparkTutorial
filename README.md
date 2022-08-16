@@ -244,4 +244,92 @@ ages.partitionBy(partitioner)
 addresses.partitionBy(partitioner)
 
 Accumulators are variables that are used for aggregating information across the executors.For example we can calculate how many records are corrupted or count events that occur during job execution for debugging purposes.
+Tasks on worker nodes cannot access the accumulators value. Accumulators are write-only variables , this allows accumulators to be implemented efficiently, without having to communicate every update.
+using accumulators is not the only solution to solve these problems , It is possible to aggregate values from an entire RDD back to the driver program using actions like reduce or reduceByKey.
+But sometimes we prefer a simpleway to aggregate values that in the process of transforming a RDD are generated at a different scale or granularity than that of the RDD itself.
+
+Out of the box, Spark supports several accumulators of types such as Double and Long.Spark also allows users to define custom accumulator types and custom aggregation opeartions such as finding the maximum of the accumulated values instead of adding them.
+You will need to extend the AccumulatorV2 abstract class to define your custom accumulators.
+
+Broadcast variables: Broadcast variables allow the programmer to keep a read-only variable cached on each machine rather than shipping a copy of it with tasks.
+They can be used for example to give every node , a copy of a large input dataset in an efficient manner.All broadcast variables will be kept at all the worker nodes for use in one or more spark operations.
+
+Procedure of using broadcast variables:: Create a broadcast variable T by calling SparkContext.broadcast() on an object of type T.
+The broadcast variable can be any type as long as it's serializable because the broadcast needs to be passed from the driver program to all the worker in the Spark cluster across the wire.
+You can also broadcast a custom java object, just make sure the object implements the serializable interface.
+The variable will be sent to each node only once and should be treated as read-only meaning updates will not be propagated to other nodes.
+The value of broadcast can be accessed by calling the value method in each node.
+
+Problems if not using broadcast variables?
+Spark automatically sends all variables refrenced in our closures to the worker nodes , but spark will send it seperately for each operation.
+we can potentially use the same variable in multiple parallel opeartions but spark will send it seperately for each opeartion.
+This can lead to some performance issue if the size of data to transfer is significant.
+  
+Spark SQL:: Spark Sql introduces a tabular data abstraction called DataFrame since Spark 1.3 , a dataframe is a data abstraction or a domain specific language for working with structured and semi-structured data.
+DataFrames store data in a more efficient manner than native RDDs taking advantage of their schema.
+It uses the immutable in-memory,resilient,distributed and parallel capabilities of RDD, and applies a structure called schema to the data allowing Spark to manage the schema and only pass data between nodes, in a much more efficient way than using java serialization.
+Unlike an RDD data is organized into named columns like a table in a relational database.
+Dataset:: A dataset is a set of structured data,not necessarily a row but it could be of a particular type.Java and spark will know the type of the data in dataset at compile time.
+Dataset takes on two distinct APIs characteristics a strongly-typed api and an untyped api.
+Consider DataFrame as untyped view of a Dataset,which is a dataset of row where a row is generic untyped JVM object.
+Dataset by contrast is a collection of strongly typed jvm object.
+Catalyst Optimizer: Spark Sql uses an optimizer called Catalyst to optimize all the queries written both in Spark SQL and DataFrame DSL.
+This optimizer makes queries run much faster than their RDD counterparts.
+The catalyst is a modular library which is built as a rule-based system. Each rule in the framework focuses on the specific optimization.For example rule like constantfolding focuses on removing constant expression from the query.
+SparkSql catalyst optimizer can do more of the heavy-lifting for us to optimize the join performance , using spark sql join we have to give up some of our control.
+For example Spark Sql can sometimes push down or re-order operations to make the joins more efficient.The downside is that we don't have controls over the partitioner for Datasets.
+so we can't manually avoid shuffles as we did with core spark joins.
+
+The standard SQL join types are supported by spark sql can be specified as the JoinType when performin join.
+public Dataset<Row> join(Dataset<?> right,Column joinExprs,String joinType)
+markerSpaceDataset.join(postCodeDataset,col("postcode"),left_outer);
+Spark SQL join types:
+inner,outer,left_outer,right_outer,left_semi.
+
+Row:: Row objects represent records inside dataset and are simply fixed-length array of fields. Row objects have a number of getter functions to obtain the value of each field given its index.The get method takes a column number and returns us an object type; we are responsible for casting the object to the correct type.
+Object field7 = row.get(7);
+For primitive and boxed types there is a get type method which returns the value of that type.
+long field1=row.getLong(1);
+boolean field2=row.getBoolean(2);
+
+Encoders:: Dataset API has the concept of encoders which translate between JVM representations which are Java objects and Spark's internal binary format.
+Spark has built-in encoders such as integer encoder or long encoder which are very advanced in that they generate bytecode to interact with off-heap data and provide on-demand
+access to individual attributes without having to de-serialize an entire object.
+Encoders.INT();
+Encoders.LONG();
+The encoder is used to convert a JVM object of type response to and from the internal spark SQL representation.
+Supported field types:
+all primitive types(int,long etc)
+all boxed types(Integer,Long etc)
+list and arrays
+Not supported field types :-> optional fields and map.
+The class must have a setter method with zero arg-constructor
+
+Both dataset and dataframes are built on top of RDD. RDD is the primary user facing API in Spark. At the core , RDD is an immutable distributed collection of elements of your data partitioned across nodes in your cluster that can be operated in parallel with low-level api that offers transformations and actions.
+using RDDs when:
+low-level transformation,actions and control on our dataset are needed. Unstructured data , such as media streams of text.
+optimization and performance benefits available with Datasets are not needed , need to manipulate our data with functional programming constructs than domain specific expressions.
+Use Datasets when:
+Rich semantics,high-level abstractions and domain specific apis are needed. Our processing requires aggregation,averages,sum,sql queries and columnar access on semi-structured data.
+We want a higher degree of type-safety at compile time,typed JVM objects.
+
+Spark SQL has some built-in optimzations such as predicate push-down which allows Spark SQL to move some parts of our query down to the engine we are querying.
+Caching : If you find yourself performing some queries ortransformations on a dataset repeatedly we should consider caching the dataset which can be done by calling the cache method on the dataset.
+responseDataset.cache();
+When caching a dataset , Spark Sql uses an in-memory columnar storage for the dataset.
+If our subsequent queries depend only on subsets of the data, spark sql will minimize the data read and automatically tune compression to reduce garbage collection pressure and memory usage.
+
+Configure Spark Properties
+spark.sql.codegen
+SparkSession session=SparkSession.builder().config("spark.sql.codegen",false).getOrCreate();
+It will ask spark sql to compile each query to Java byte code before executing it.
+This codegen option could make long queries or repeated queries substantially faster, as Spark generates specific code to run them.For short queries or some non-repeated ad-hoc queries this option could add unnecessary overhead as Spark has to run a compiler for each query.
+It's recommended to use codegen option for workflows which involves large queries or with the same repeated query.
+
+spark.sql.inMemoryColumnarStorage.batchSize
+When caching dataset, Spark groups together the records in batches of the size given by this option and compresses each batch.
+The default batch size is 1000.
+SparkSession session=SparkSession.builder().config("spark.sql.inMemoryColumnarStorage.batchSize",10000).getOrCreate();
+Having a larger batch size can improve memory utilization and compression.
+A batch with a large number of records might be hard to build up in memory and can lead to an OutOfMemoryError.
 

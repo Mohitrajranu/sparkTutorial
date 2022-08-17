@@ -333,3 +333,42 @@ SparkSession session=SparkSession.builder().config("spark.sql.inMemoryColumnarSt
 Having a larger batch size can improve memory utilization and compression.
 A batch with a large number of records might be hard to build up in memory and can lead to an OutOfMemoryError.
 
+Cluster Manager: The cluster manager is a pluggable component in spark. Spark is packaged with built-in cluster manager called the standalone cluster manager.
+There are other types of Spark Manager master such as :-
+Hadoop Yarn :- A resource management and scheduling tool for a Hadoop MapReduce cluster.
+Apache Mesos :- Centralized fault-tolerant cluster manager and global resource manager for your entire data center.
+The cluster manager abstracts away the uderlying cluster environment so that you can use the same unified high-level spark api to write spark program which can run on different clusters.
+Spark provides a single script you can use to submit your application to it called spark-submit.
+
+package spark application && use spark-submit.
+Steps:-
+1. Download Spark distribution to our local box.
+2. Export our Spark application to a jar file.
+./gradlew jar
+./gradlew clean jar
+3. Submit our application to our local spark cluster through spark-submit script. 
+./spark-2.1.0-bin-hadoop2.7/bin/spark-submit StackOverFlowSurvey.jar
+
+Running Spark Applications on a cluster.
+
+The user submits an application using spark-submit. spark-submit launches the driver program and invokes the main method specified by the user.
+The driver program contacts the cluster manager to ask for resources to start executors.The cluster manager launches executors on behalf of the driver program.
+The driver process runs through the user application. Based on the RDD or dataset operations in the program, the driver sends work to executors in form of tasks
+Tasks are run on executor processes to compute and save results.
+If the driver's main method exits or it calls SparkContext.stop() , it will terminate the executors.
+Spark submit options:
+./bin/spark-submit --executor-memory 20G --total-executor-cores 100 abc.jar
+
+Running on Amazon EMR.
+Amazon EMR cluster provides a managed Hadoop framework that makes it easy,fast and cost-effective to process vast amounts of data across dynamically scalable Amazon EC2 instances.
+We are going to run our spark application on top of the Hadoop cluster and we will put the input data source into the S3.
+S3 doesn't allows space in file name
+s3n://bucket-name/filename -> input option
+upload the jar file as well to s3
+SparkSession session = SparkSession.builder().appName("StackOverFlowSurvey").getOrCreate();--> remove the master{local} option 
+
+Now option the emr session from putty using ssh
+copy the jar file to the linux instance.
+aws s3 cp s3://bucket-name/jarfile .
+by default the spark-submit script is added to the classpath of emr-instance.
+spark-submit StackOverFlowSurvey.jar
